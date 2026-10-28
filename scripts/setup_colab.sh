@@ -70,8 +70,9 @@ fi
 ldconfig
 
 echo "==> [6/8] Python 3.12 venv with pyds 1.2.2 (sees the apt GStreamer bindings)"
-[[ -d "$VENV" ]] || /usr/bin/python3 -m venv --system-site-packages "$VENV"
-"$VENV/bin/pip" install -q --upgrade pip
+# Colab's Python has no ensurepip, so create the venv without pip and bootstrap it
+[[ -x "$VENV/bin/python" ]] || /usr/bin/python3 -m venv --without-pip --system-site-packages "$VENV"
+[[ -x "$VENV/bin/pip" ]] || curl -sS https://bootstrap.pypa.io/get-pip.py | "$VENV/bin/python"
 "$VENV/bin/pip" install -q "$PYDS_WHL" -r deepstream/requirements.txt -r backend/requirements.txt
 
 echo "==> [7/8] MediaMTX + dashboard build"
