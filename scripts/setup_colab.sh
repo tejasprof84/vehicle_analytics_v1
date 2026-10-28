@@ -70,8 +70,16 @@ fi
 ldconfig
 
 echo "==> [6/8] Python 3.12 venv with pyds 1.2.2 (sees the apt GStreamer bindings)"
-# Colab's Python has no ensurepip, so create the venv without pip and bootstrap it
-[[ -x "$VENV/bin/python" ]] || /usr/bin/python3 -m venv --without-pip --system-site-packages "$VENV"
+# Use Ubuntu's own Python 3.12: Colab replaces /usr/bin/python3 with another
+# version, but pyds (cp312) and the apt GStreamer bindings need 3.12.
+# Colab's Python also has no ensurepip, so create the venv without pip and bootstrap it.
+PY=/usr/bin/python3.12
+[[ -x "$PY" ]] || apt-get install -y --no-install-recommends python3.12 python3.12-venv
+if [[ -x "$VENV/bin/python" ]] && ! "$VENV/bin/python" -c 'import sys; sys.exit(sys.version_info[:2] != (3, 12))'; then
+  rm -rf "$VENV"                       # built with the wrong Python by an earlier run
+fi
+[[ -x "$VENV/bin/python" ]] || "$PY" -m venv --without-pip --system-site-packages "$VENV"
+"$VENV/bin/python" -V
 [[ -x "$VENV/bin/pip" ]] || curl -sS https://bootstrap.pypa.io/get-pip.py | "$VENV/bin/python"
 "$VENV/bin/pip" install -q "$PYDS_WHL" -r deepstream/requirements.txt -r backend/requirements.txt
 
