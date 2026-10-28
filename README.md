@@ -87,26 +87,23 @@ flowchart TD
 
 ---
 
-## 3. Components
+## 3. Key files
 
-| Component | File | What it does | How |
-|---|---|---|---|
-| Fake live camera | [scripts/start_stream.sh](scripts/start_stream.sh) | Turns an MP4 into a live RTSP camera | `ffmpeg -re -stream_loop -1 … -f rtsp rtsp://127.0.0.1:8554/traffic` (H.264, no B-frames, TCP) |
-| Broker | [mediamtx/mediamtx.yml](mediamtx/mediamtx.yml) | One hub for all video | Path `traffic` (input); path `processed` pulls DeepStream's output from `:8555/ds` and serves it as RTSP + HLS |
-| Pipeline | [deepstream/app.py](deepstream/app.py) `build_pipeline()` | Builds and links the GStreamer elements | Elements are created in code; the source pad is linked when the stream arrives (`pad-added`) |
-| Line config | [deepstream/app.py](deepstream/app.py) `write_analytics_config()` | Creates `nvdsanalytics.txt` from `--line x1,y1,x2,y2` | Two entries on the same line with opposite arrows (`in`, `out`) |
-| Probe (core logic) | [deepstream/app.py](deepstream/app.py) `VehicleCounter` | Reads metadata every frame and creates events | Bounding box from `obj_meta.rect_params`, track ID from `obj_meta.object_id`, colour from classifier meta, crossing from `NvDsAnalyticsObjInfo.lcStatus` |
-| Async DB writer | [deepstream/db_writer.py](deepstream/db_writer.py) | Saves events without blocking video | `queue.put_nowait()` in the probe; a thread inserts batches (50 events or 250 ms) with `execute_values`; reconnects and retries |
-| Detector config | [scripts/prepare_pgie_config.py](scripts/prepare_pgie_config.py) | Generates the PGIE config | Starts from DeepStream's own TrafficCamNet config, so model paths match the installed SDK; keeps only `car` |
-| Tracker config | [deepstream/configs/tracker_config.txt](deepstream/configs/tracker_config.txt) | NvDCF settings | SDK's `config_tracker_NvDCF_perf.yml`, 640×384 |
-| Colour config | [deepstream/configs/sgie_color.txt](deepstream/configs/sgie_color.txt) | Secondary classifier settings | `process-mode=2` (objects only), ImageNet normalisation, FP16 |
-| Colour model training | [color_classifier/train.py](color_classifier/train.py) | Trains the colour model | ResNet18 (ImageNet weights) fine-tuned 6 epochs on VCoR; exports one self-contained ONNX file + labels |
-| Schema | [database/schema.sql](database/schema.sql) | Table + indexes | `vehicle_events`, indexes on time, colour, direction |
-| API | [backend/main.py](backend/main.py) | Data for the dashboard | `/api/summary`, `/api/events`, `/api/timeseries`, `/api/health`, `/hls/…` |
-| Dashboard | [frontend/src/](frontend/src/) | Live web UI | Polls the API every 1 s; hls.js player |
-| Launcher | [scripts/run_all.sh](scripts/run_all.sh) | Starts all four services | One tmux session with four panes |
-| Colab installer | [scripts/setup_colab.sh](scripts/setup_colab.sh) | Installs DeepStream 8.0 stack natively | CUDA 12.8 → TensorRT 10.9 → DeepStream 8.0 `.deb` → `pyds` 1.2.2 (Python 3.12 venv) |
-| Colab notebook | [notebooks/colab_demo.ipynb](notebooks/colab_demo.ipynb) | One-click demo | Install, fetch video, start, links, logs, DB rows, one frame |
+**[deepstream/app.py](deepstream/app.py)** is the core of the project. `build_pipeline()` creates and links the GStreamer elements in the order shown above, and links the RTSP source once the stream arrives. `write_analytics_config()` turns the `--line x1,y1,x2,y2` argument into the nvdsanalytics config, with two opposite arrows on the same line so each crossing is labelled `in` or `out`. The `VehicleCounter` probe runs on every frame after nvdsanalytics: it reads each vehicle's bounding box (`rect_params`), tracker ID (`object_id`), colour (from the classifier metadata) and crossing status (`lcStatus`), skips IDs that were already counted, and hands each new crossing to the database writer.
+
+**[deepstream/db_writer.py](deepstream/db_writer.py)** saves events without slowing the video. The probe only puts an event on a queue (`put_nowait`, never waits); a background thread takes events off the queue and inserts them into PostgreSQL in batches (every 50 events or 250 ms). If the database goes down, it keeps the batch, reconnects and retries.
+
+**[color_classifier/train.py](color_classifier/train.py)** trains the colour model. It fine-tunes an ImageNet ResNet18 on the VCoR dataset (15 colours), keeps the epoch with the best validation accuracy, and exports a single ONNX file plus the label list that DeepStream's secondary `nvinfer` loads.
+
+**[scripts/prepare_pgie_config.py](scripts/prepare_pgie_config.py)** builds the detector config from the TrafficCamNet config that ships with the installed DeepStream version, so model paths always match the SDK. It keeps only the `car` class and falls back to FP16 when no INT8 calibration file exists.
+
+**[backend/main.py](backend/main.py)** is the FastAPI server behind the dashboard. It answers the summary, events and per-minute queries from PostgreSQL, serves the built React app, and passes MediaMTX's HLS video through `/hls` so the dashboard and its video share one address.
+
+**[frontend/src/](frontend/src/)** is the React dashboard. It polls the API every second for counts, the colour breakdown and recent crossings, and plays the annotated video with hls.js.
+
+**[mediamtx/mediamtx.yml](mediamtx/mediamtx.yml)** configures the video broker: `traffic` receives the camera stream from FFmpeg, and `processed` pulls DeepStream's annotated output and re-publishes it as RTSP and HLS.
+
+**[scripts/setup_colab.sh](scripts/setup_colab.sh)** installs the full DeepStream 8.0 stack on Colab without Docker (CUDA 12.8, TensorRT 10.9, DeepStream 8.0, `pyds` in a Python 3.12 environment). **[notebooks/colab_demo.ipynb](notebooks/colab_demo.ipynb)** runs the whole project on Colab cell by cell.
 
 ### Repository structure
 ```
