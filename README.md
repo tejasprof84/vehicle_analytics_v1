@@ -41,27 +41,33 @@ An end-to-end computer vision system that:
 ## 2. Architecture
 
 ```mermaid
-flowchart LR
-    CAM["Looped MP4\n(live camera)"] -- "FFmpeg (RTSP publish)" --> MTX[("MediaMTX\n:8554 RTSP\n:8888 HLS")]
-    MTX -- "rtsp://.../traffic" --> SRC
+flowchart TD
+    CAM["Looped MP4 (live camera)"] -- "FFmpeg: RTSP publish" --> MTX[("MediaMTX<br/>RTSP :8554 · HLS :8888")]
+    MTX -- "rtsp://…/traffic" --> SRC
 
     subgraph DS["DeepStream pipeline (GPU)"]
-        SRC["nvurisrcbin\n(NVDEC decode)"] --> MUX["nvstreammux"]
-        MUX --> PGIE["nvinfer PGIE\nTrafficCamNet"]
-        PGIE --> TRK["nvtracker\nNvDCF"]
-        TRK --> SGIE["nvinfer SGIE\ncolour classifier"]
-        SGIE --> ANA["nvdsanalytics\nline crossing"]
-        ANA --> OSD["nvdsosd\nboxes + labels"]
-        OSD --> ENC["NVENC H.264\n→ RTSP :8555/ds"]
+        direction TB
+        SRC["nvurisrcbin<br/>NVDEC decode"] --> MUX["nvstreammux<br/>1280×720 batch"]
+        MUX --> PGIE["nvinfer PGIE<br/>TrafficCamNet: detect"]
+        PGIE --> TRK["nvtracker<br/>NvDCF: track IDs"]
+        TRK --> SGIE["nvinfer SGIE<br/>colour on each box"]
+        SGIE --> ANA["nvdsanalytics<br/>line crossing in / out"]
+        ANA --> OSD["nvdsosd<br/>draw boxes + labels"]
+        OSD --> ENC["NVENC H.264<br/>RTSP server :8555/ds"]
     end
 
-    ANA -. "pad probe\n(metadata)" .-> Q["in-memory queue"]
-    Q --> W["DB writer thread\n(batched INSERT)"]
-    W --> PG[("PostgreSQL\nvehicle_events")]
+    subgraph STORE["Storage (async)"]
+        direction TB
+        Q["in-memory queue"] --> W["DB writer thread<br/>batched INSERT"]
+        W --> PG[("PostgreSQL<br/>vehicle_events")]
+    end
+
+    ANA -. "pad probe: crossing event" .-> Q
     ENC -- "pulled as /processed" --> MTX
+
     PG --> API["FastAPI :8000"]
-    MTX -- "HLS /processed\n(passed through /hls)" --> API
-    API -- "JSON polled every 1 s\n+ HLS video" --> UI["React dashboard"]
+    MTX -- "HLS /processed via /hls" --> API
+    API -- "JSON every 1 s + HLS video" --> UI["React dashboard"]
 ```
 
 ### How data moves
