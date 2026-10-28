@@ -1,0 +1,32 @@
+# ---------------------------------------------------------------------------
+# MediaMTX configuration (video broker)
+#
+# Only the settings this project needs are listed; everything else uses
+# MediaMTX defaults.
+#
+#   rtsp://<host>:8554/traffic      raw video, published by FFmpeg
+#   rtsp://<host>:8554/processed    annotated video (boxes, IDs, colour, line)
+#   http://<host>:8888/processed/   same annotated video as HLS (for React)
+# ---------------------------------------------------------------------------
+
+logLevel: info
+
+# Protocol listeners
+rtspAddress: :8554
+hlsAddress: :8888
+webrtcAddress: :8889
+
+# Allow the React dashboard (different port = different origin) to load HLS.
+hlsAllowOrigin: '*'
+
+paths:
+  # Input stream. FFmpeg pushes (publishes) a camera feed or a looped MP4 here.
+  traffic:
+    source: publisher
+
+  # Output stream. DeepStream serves its annotated video on a small internal
+  # RTSP server (port 8555). MediaMTX pulls it and re-distributes it over
+  # RTSP / HLS / WebRTC, so every viewer goes through one broker.
+  processed:
+    source: rtsp://127.0.0.1:8555/ds
+    sourceOnDemand: no

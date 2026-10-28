@@ -1,0 +1,44 @@
+# ---------------------------------------------------------------------------
+# Secondary GIE: vehicle colour classifier (ResNet18, ONNX, 224x224)
+#
+# Runs ONLY on the bounding boxes produced by the primary detector
+# (process-mode=2, operate-on-gie-id=1). nvinfer crops each box, resizes it
+# to 224x224, normalises it and classifies it.
+# Model + labels are produced by color_classifier/train.py.
+# Relative paths are resolved from this file's folder.
+# ---------------------------------------------------------------------------
+[property]
+gpu-id=0
+gie-unique-id=2
+
+# Model
+onnx-file=../../models/color/vehicle_color_resnet18.onnx
+model-engine-file=../../models/color/vehicle_color_resnet18.onnx_b16_gpu0_fp16.engine
+labelfile-path=../../models/color/labels_color.txt
+batch-size=16
+# 0=FP32, 1=INT8, 2=FP16
+network-mode=2
+# 1 = classifier
+network-type=1
+
+# Run on objects, not full frames
+process-mode=2
+operate-on-gie-id=1
+operate-on-class-ids=0
+
+# Pre-processing = ImageNet normalisation used in training
+#   y = net-scale-factor * (x - offset)   (x in 0..255, RGB)
+#   1/(0.226*255) = 0.01735207  (0.226 = mean of ImageNet std)
+model-color-format=0
+net-scale-factor=0.01735207
+offsets=123.675;116.28;103.53
+maintain-aspect-ratio=0
+
+# Skip tiny / far-away boxes (colour is unreliable there)
+input-object-min-width=40
+input-object-min-height=40
+
+# Classify each tracked vehicle once and re-use the result on later frames
+# (needs nvtracker upstream). Saves a lot of GPU time.
+classifier-async-mode=1
+classifier-threshold=0.35

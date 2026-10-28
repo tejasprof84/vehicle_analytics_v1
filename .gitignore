@@ -1,0 +1,22 @@
+# secrets / local env
+.env
+kaggle.json
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+color_classifier/data/
+
+# Node / build
+frontend/node_modules/
+frontend/dist/
+
+# downloaded binaries
+bin/
+
+# TensorRT engines are GPU-specific -> rebuilt automatically on first run
+*.engine
+
+# generated at setup time (see *.example.txt)
+deepstream/configs/pgie_trafficcamnet.txt

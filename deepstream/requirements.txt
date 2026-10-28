@@ -1,0 +1,3 @@
+# pyds (DeepStream Python bindings) is installed from the NVIDIA wheel by scripts/setup.sh
+numpy==1.26.0
+psycopg2-binary>=2.9

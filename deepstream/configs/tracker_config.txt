@@ -1,0 +1,14 @@
+# ---------------------------------------------------------------------------
+# nvtracker (multi-object tracker)
+#
+# NvDCF = NVIDIA Discriminative Correlation Filter tracker. It keeps the same
+# ID on a vehicle across frames (even through short occlusions), which is what
+# guarantees a vehicle is counted only once when it crosses the line.
+# ---------------------------------------------------------------------------
+[tracker]
+tracker-width=640
+tracker-height=384
+gpu-id=0
+ll-lib-file=/opt/nvidia/deepstream/deepstream/lib/libnvds_nvmultiobjecttracker.so
+ll-config-file=/opt/nvidia/deepstream/deepstream/samples/configs/deepstream-app/config_tracker_NvDCF_perf.yml
+display-tracking-id=1
