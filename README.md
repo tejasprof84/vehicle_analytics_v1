@@ -98,7 +98,17 @@ flowchart LR
 - **One of these** setups:
   - **Recommended:** the official container `nvcr.io/nvidia/deepstream:7.1-triton-multiarch`. This repo's `setup.sh` was written for it.
   - Ubuntu 22.04 with DeepStream 7.1 SDK, TensorRT 10 and CUDA 12.6 installed natively.
-- No NVIDIA GPU locally? See **[docs/CLOUD_GPU_SETUP.md](docs/CLOUD_GPU_SETUP.md)**, which runs everything on a rented cloud GPU.
+- No NVIDIA GPU locally? Two options:
+  - **Free:** a Google Colab T4 with **[notebooks/colab_demo.ipynb](notebooks/colab_demo.ipynb)** ([open in Colab](https://colab.research.google.com/github/tejasprof84/vehicle-analytics/blob/main/notebooks/colab_demo.ipynb)). See *Running on Google Colab* below.
+  - **Rented GPU:** **[docs/CLOUD_GPU_SETUP.md](docs/CLOUD_GPU_SETUP.md)** runs the DeepStream 7.1 container on a cloud GPU.
+
+### Running on Google Colab (free T4)
+Colab has no Docker, and its runtime is Ubuntu 24.04 with Python 3.12. That matches **DeepStream 8.0**, not the 7.1 container. [scripts/setup_colab.sh](scripts/setup_colab.sh) installs the 8.0 stack natively (CUDA 12.8, TensorRT 10.9, DeepStream 8.0 `.deb`, `pyds` 1.2.2 in a Python 3.12 venv). The pipeline code is the same for both SDK versions.
+
+- The dashboard opens through Colab's own port proxy. Its video comes through the API's `/hls` route, so only port 8000 is used.
+- Colab does not allow tunnels, so the raw RTSP stream can't be opened in VLC on another machine. The notebook checks the stream inside the runtime instead.
+- Colab runtimes are temporary. After a disconnect, run the notebook again: about 15–20 minutes of setup, then 3–5 minutes for the first TensorRT engine build.
+- DeepStream 8.0 tags nvdsanalytics results with built-in meta types (`NVDS_FRAME_META_NVDSANALYTICS`, `NVDS_OBJ_META_NVDSANALYTICS`) instead of name-registered user types. The probe accepts both.
 
 `scripts/setup.sh` installs everything else:
 
