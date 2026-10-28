@@ -41,33 +41,14 @@ An end-to-end computer vision system that:
 ## 2. Architecture
 
 ```mermaid
-flowchart TD
-    CAM["Looped MP4 (live camera)"] -- "FFmpeg: RTSP publish" --> MTX[("MediaMTX<br/>RTSP :8554 · HLS :8888")]
-    MTX -- "rtsp://…/traffic" --> SRC
-
-    subgraph DS["DeepStream pipeline (GPU)"]
-        direction TB
-        SRC["nvurisrcbin<br/>NVDEC decode"] --> MUX["nvstreammux<br/>1280×720 batch"]
-        MUX --> PGIE["nvinfer PGIE<br/>TrafficCamNet: detect"]
-        PGIE --> TRK["nvtracker<br/>NvDCF: track IDs"]
-        TRK --> SGIE["nvinfer SGIE<br/>colour on each box"]
-        SGIE --> ANA["nvdsanalytics<br/>line crossing in / out"]
-        ANA --> OSD["nvdsosd<br/>draw boxes + labels"]
-        OSD --> ENC["NVENC H.264<br/>RTSP server :8555/ds"]
-    end
-
-    subgraph STORE["Storage (async)"]
-        direction TB
-        Q["in-memory queue"] --> W["DB writer thread<br/>batched INSERT"]
-        W --> PG[("PostgreSQL<br/>vehicle_events")]
-    end
-
-    ANA -. "pad probe: crossing event" .-> Q
-    ENC -- "pulled as /processed" --> MTX
-
-    PG --> API["FastAPI :8000"]
-    MTX -- "HLS /processed via /hls" --> API
-    API -- "JSON every 1 s + HLS video" --> UI["React dashboard"]
+flowchart LR
+    CAM["Traffic video<br/>(FFmpeg)"] -- RTSP --> MTX[("MediaMTX")]
+    MTX -- RTSP --> DS["DeepStream (GPU)<br/>detect → track →<br/>colour → count"]
+    DS -- annotated video --> MTX
+    DS -- events --> PG[("PostgreSQL")]
+    PG --> API["FastAPI"]
+    MTX -- HLS --> API
+    API --> UI["React<br/>dashboard"]
 ```
 
 ### How data moves
