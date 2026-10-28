@@ -9,12 +9,15 @@ Endpoints
   GET /api/summary?minutes=0           totals, colour + direction breakdown (0 = all time)
   GET /api/events?limit=25             most recent crossing events
   GET /api/timeseries?minutes=30       vehicles per minute (gaps filled with 0)
+  GET /hls/...                         MediaMTX HLS video, passed through this port
 """
 import os
+import urllib.error
+import urllib.request
 from contextlib import contextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from psycopg2.extras import RealDictCursor
@@ -23,6 +26,7 @@ from psycopg2.pool import ThreadedConnectionPool
 DATABASE_URL = os.getenv("DATABASE_URL",
                          "postgresql://vehicle:vehicle@127.0.0.1:5432/vehicle_analytics")
 FRONTEND_DIST = Path(__file__).resolve().parent.parent / "frontend" / "dist"
+HLS_UPSTREAM = os.getenv("HLS_UPSTREAM", "http://127.0.0.1:8888")  # MediaMTX HLS server
 
 app = FastAPI(title="Vehicle Analytics API", version="1.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["GET"], allow_headers=["*"])
@@ -123,6 +127,25 @@ def timeseries(minutes: int = Query(30, ge=5, le=1440)):
             FROM buckets b LEFT JOIN counts c USING (bucket)
             ORDER BY b.bucket""", {"m": minutes})
         return cur.fetchall()
+
+
+@app.get("/hls/{path:path}")
+def hls(path: str, request: Request):
+    """
+    Pass MediaMTX's HLS output (:8888) through this port, so the browser loads
+    the video from the same origin as the dashboard. This is needed behind
+    port-per-hostname proxies (e.g. Colab) and means only port 8000 must be reachable.
+    """
+    url = f"{HLS_UPSTREAM}/{path}"
+    if request.url.query:
+        url += f"?{request.url.query}"
+    try:
+        with urllib.request.urlopen(url, timeout=10) as res:
+            return Response(res.read(), media_type=res.headers.get("Content-Type"))
+    except urllib.error.HTTPError as exc:
+        raise HTTPException(exc.code, "HLS stream not available")
+    except OSError:
+        raise HTTPException(502, "MediaMTX not reachable")
 
 
 # Serve the built React dashboard (npm run build) at "/"

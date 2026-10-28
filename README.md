@@ -44,7 +44,7 @@ flowchart LR
     ENC -- "pulled as /processed" --> MTX
     PG --> API["FastAPI :8000"]
     API -- "JSON, polled 1 s" --> UI["React dashboard"]
-    MTX -- "HLS /processed" --> UI
+    MTX -- "HLS /processed\n(passed through /hls)" --> API
 ```
 
 ### How data moves
@@ -60,7 +60,7 @@ flowchart LR
    - `nvdsosd` draws the boxes, `#id colour` labels, the line and the running counters.
    - The frames are encoded with NVENC and served on an internal RTSP server.
    - MediaMTX pulls that stream as `/processed` and re-publishes it as HLS.
-   - The React app polls the FastAPI endpoints every second and plays the HLS feed.
+   - The React app polls the FastAPI endpoints every second and plays the HLS feed. The API passes the HLS files through its `/hls` route, so the browser needs only port 8000.
 
 ### Why each vehicle is counted exactly once
 - The **tracker** keeps the same ID for a vehicle across frames.
