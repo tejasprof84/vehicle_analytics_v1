@@ -251,28 +251,26 @@ SELECT date_trunc('minute', event_time) m, count(*) FROM vehicle_events GROUP BY
 - **Colour breakdown:** a bar per colour, with percentages.
 - **History:** vehicles per minute (stacked in/out), range selector (15 min, 1 h, 24 h, all time).
 - **Live table:** the 25 most recent crossings, newest first.
-- **Live video (bonus):** the DeepStream-annotated stream (HLS), with boxes, IDs, colours and the line.
+- **Live video:** the DeepStream-annotated stream (HLS), with boxes, IDs, colours and the line.
 
 Metrics and the table refresh every 1 s, the chart every 5 s (polling; works through any proxy or tunnel).
 
 ---
 
-## 8. Deviations from the assignment, and why
+## 8. Design decisions and limitations
 
-The pipeline follows the required stack and phases. These are the places where the implementation differs from the brief, or where a requirement was met in a different way:
+Choices I made where the usual setup was not available or did not fit, and the current limits of the project:
 
-| # | Assignment asks for | What this project does | Why |
-|---|---|---|---|
-| 1 | NVIDIA DeepStream pipeline (no version given) | The tested demo runs **DeepStream 8.0**, installed natively on a **free Google Colab T4**. The DeepStream **7.1 container** path (`setup.sh`, `docs/CLOUD_GPU_SETUP.md`) is included but has **not** been run end-to-end. | No local NVIDIA GPU was available (Intel integrated graphics). Colab has no Docker and runs Ubuntu 24.04 + Python 3.12, which matches DeepStream 8.0, not the 7.1 container. The pipeline code supports both versions. |
-| 2 | Phase 1: verify the RTSP stream in a media player (e.g. VLC) | On Colab, the stream is verified **inside the runtime**: MediaMTX logs (`stream is available and online`), `ffmpeg` frames pulled from `rtsp://127.0.0.1:8554/processed`, and the live HLS player. VLC works on a normal GPU machine through an SSH tunnel (Option B). | Colab's terms do not allow tunnels/remote proxies, so the RTSP port can't be opened from another computer. |
-| 3 | Live camera feed or looped MP4 | A **25-second free Pexels clip** (fixed camera above a road), looped by FFmpeg. | No physical camera. DeepStream's bundled sample clips were not suitable for line counting (low sidewalk view, fisheye, dashcam). Because the clip loops, the same cars pass again every 25 s and are counted again with new track IDs; with a real camera every vehicle is new. |
-| 4 | Secondary classifier for colour | A **colour model trained for this project** (ResNet18 on VCoR, 87.5 % validation accuracy). Small/far boxes (< 40 px) are labelled `unknown`. | DeepStream 7.x/8.x no longer ship a car-colour model (the old one was Caffe, which TensorRT 10 dropped). Colour on tiny crops is unreliable, so they are skipped on purpose. |
-| 5 | Detect vehicles | Only TrafficCamNet's **`car`** class is kept; `vehicle_class` is always `car`. | TrafficCamNet's classes are car / bicycle / person / road sign; "car" is its vehicle class. A model with truck/bus classes would be a drop-in change of the PGIE config. |
-| 6 | React app plays the live feed (WebRTC or HLS) | HLS is played **through the API's `/hls` route**, not directly from MediaMTX port 8888. | Colab gives each port its own hostname, so a URL like `<host>:8888` does not exist there. Passing the video through port 8000 keeps the dashboard and video on one origin and works everywhere. |
-| 7 | Live dashboard | The dashboard **polls** the API every second instead of using push (WebSocket). | Simpler and robust behind proxies; one-second updates are enough for traffic counts. |
-| 8 | Deployed system | The Colab runtime is **temporary**: each new session needs ~15–20 min of setup plus 3–5 min of TensorRT engine build, and a free GPU is not always available. | Limits of the free Colab tier. On a persistent GPU machine (Option B) setup runs once and the engines are cached. |
-
-Requirements met as specified: MediaMTX ingest and redistribution, FFmpeg-published RTSP, `nvstreammux` ingest, primary `nvinfer` detector, `nvtracker` (NvDCF), secondary `nvinfer` on bounding boxes only, `nvdsanalytics` line crossing, PostgreSQL schema with id / vehicle_id / color / timestamp / direction, asynchronous inserts from the probe (direct connector), React dashboard with total count, colour breakdown and live table, bonus HLS video with drawn boxes.
+| # | Topic | Usual setup | What this project does | Why |
+|---|---|---|---|---|
+| 1 | GPU platform and DeepStream version | DeepStream 7.1 container on a dedicated NVIDIA GPU machine | The tested setup runs **DeepStream 8.0**, installed natively on a **free Google Colab T4**. The DeepStream **7.1 container** path (`setup.sh`, `docs/CLOUD_GPU_SETUP.md`) is included but has **not** been run end-to-end. | I had no local NVIDIA GPU (Intel integrated graphics). Colab has no Docker and runs Ubuntu 24.04 + Python 3.12, which matches DeepStream 8.0, not the 7.1 container. The pipeline code supports both versions. |
+| 2 | Checking the RTSP stream | Open `rtsp://<host>:8554/traffic` in VLC | On Colab, the stream is checked **inside the runtime**: MediaMTX logs (`stream is available and online`), `ffmpeg` frames pulled from `rtsp://127.0.0.1:8554/processed`, and the live HLS player. VLC works on a normal GPU machine through an SSH tunnel (Option B). | Colab's terms do not allow tunnels/remote proxies, so the RTSP port can't be opened from another computer. |
+| 3 | Video source | A live traffic camera | A **25-second free Pexels clip** (fixed camera above a road), looped by FFmpeg as a live RTSP stream. | No physical camera. DeepStream's bundled sample clips were not suitable for line counting (low sidewalk view, fisheye, dashcam). Because the clip loops, the same cars pass again every 25 s and are counted again with new track IDs; with a real camera every vehicle is new. |
+| 4 | Colour classifier | A ready-made car-colour model | A **colour model trained for this project** (ResNet18 on VCoR, 87.5 % validation accuracy). Small/far boxes (< 40 px) are labelled `unknown`. | DeepStream 7.x/8.x no longer ship a car-colour model (the old one was Caffe, which TensorRT 10 dropped). Colour on tiny crops is unreliable, so they are skipped on purpose. |
+| 5 | Vehicle classes | Separate car / truck / bus classes | Only TrafficCamNet's **`car`** class is kept; `vehicle_class` is always `car`. | TrafficCamNet's classes are car / bicycle / person / road sign; "car" is its vehicle class. A detector with truck/bus classes would be a drop-in change of the PGIE config. |
+| 6 | Live video in the dashboard | Played directly from MediaMTX (port 8888) | Played **through the API's `/hls` route** on port 8000. | Colab gives each port its own hostname, so a URL like `<host>:8888` does not exist there. Passing the video through port 8000 keeps the dashboard and video on one origin and works everywhere. |
+| 7 | Dashboard updates | Push (WebSocket) | The dashboard **polls** the API every second. | Simpler and robust behind proxies; one-second updates are enough for traffic counts. |
+| 8 | Runtime | A persistent server | The Colab runtime is **temporary**: each new session needs ~15–20 min of setup plus 3–5 min of TensorRT engine build, and a free GPU is not always available. | Limits of the free Colab tier. On a persistent GPU machine (Option B) setup runs once and the engines are cached. |
 
 ---
 
