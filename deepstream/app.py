@@ -110,6 +110,20 @@ def meta_type_id(meta_type):
     return int(meta_type)
 
 
+def analytics_meta_types(level):
+    """
+    Meta type ids that nvdsanalytics may use for its OBJ / FRAME results.
+    DeepStream <= 7.x registers them by name ("NVIDIA.DSANALYTICS<level>.USER_META");
+    DeepStream 8.0 uses built-in enum values (NVDS_<level>_META_NVDSANALYTICS).
+    Accept both so the app runs on either SDK.
+    """
+    ids = {meta_type_id(pyds.nvds_get_user_meta_type(f"NVIDIA.DSANALYTICS{level}.USER_META"))}
+    builtin = getattr(pyds.NvDsMetaType, f"NVDS_{level}_META_NVDSANALYTICS", None)
+    if builtin is not None:
+        ids.add(meta_type_id(builtin))
+    return ids
+
+
 def user_meta_types(l_user):
     """List the meta type ids in a user-meta list (for the one-time debug log)."""
     types = []
@@ -181,7 +195,7 @@ class VehicleCounter:
                 user_meta = pyds.NvDsUserMeta.cast(l_user.data)
             except StopIteration:
                 break
-            if meta_type_id(user_meta.base_meta.meta_type) == self.analytics_obj_type:
+            if meta_type_id(user_meta.base_meta.meta_type) in self.analytics_obj_type:
                 info = pyds.NvDsAnalyticsObjInfo.cast(user_meta.user_meta_data)
                 self.analytics_objs += 1
                 crossed.extend(info.lcStatus)
@@ -199,7 +213,7 @@ class VehicleCounter:
                 user_meta = pyds.NvDsUserMeta.cast(l_user.data)
             except StopIteration:
                 break
-            if meta_type_id(user_meta.base_meta.meta_type) == self.analytics_frame_type:
+            if meta_type_id(user_meta.base_meta.meta_type) in self.analytics_frame_type:
                 info = pyds.NvDsAnalyticsFrameMeta.cast(user_meta.user_meta_data)
                 self.lc_cum = dict(info.objLCCumCnt)
             try:
@@ -234,10 +248,8 @@ class VehicleCounter:
 
     def _process_batch(self, gst_buffer):
         if self.analytics_obj_type is None:
-            self.analytics_obj_type = meta_type_id(
-                pyds.nvds_get_user_meta_type("NVIDIA.DSANALYTICSOBJ.USER_META"))
-            self.analytics_frame_type = meta_type_id(
-                pyds.nvds_get_user_meta_type("NVIDIA.DSANALYTICSFRAME.USER_META"))
+            self.analytics_obj_type = analytics_meta_types("OBJ")
+            self.analytics_frame_type = analytics_meta_types("FRAME")
 
         batch_meta = pyds.gst_buffer_get_nvds_batch_meta(hash(gst_buffer))
         l_frame = batch_meta.frame_meta_list
@@ -249,7 +261,7 @@ class VehicleCounter:
 
             if not self.meta_types_logged and frame_meta.obj_meta_list is not None:
                 first_obj = pyds.NvDsObjectMeta.cast(frame_meta.obj_meta_list.data)
-                log.info("Meta types: analytics obj=%d frame=%d | seen on object=%s frame=%s",
+                log.info("Meta types: analytics obj=%s frame=%s | seen on object=%s frame=%s",
                          self.analytics_obj_type, self.analytics_frame_type,
                          user_meta_types(first_obj.obj_user_meta_list),
                          user_meta_types(frame_meta.frame_user_meta_list))
