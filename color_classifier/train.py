@@ -20,6 +20,7 @@ import argparse
 import os
 import time
 
+import onnx
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
@@ -120,7 +121,7 @@ def main():
 
     # ---- export best model to ONNX --------------------------------------------
     net.load_state_dict(best_state)
-    export = WithSoftmax(net.cpu().eval())
+    export = WithSoftmax(net.cpu()).eval()
     os.makedirs(OUT_DIR, exist_ok=True)
     onnx_path = os.path.join(OUT_DIR, "vehicle_color_resnet18.onnx")
     torch.onnx.export(
@@ -129,6 +130,11 @@ def main():
         dynamic_axes={"input": {0: "batch"}, "probs": {0: "batch"}},
         opset_version=17,
     )
+    # Newer PyTorch (dynamo exporter) writes the weights to a separate
+    # '.onnx.data' file. Re-save as ONE self-contained file for nvinfer.
+    onnx.save_model(onnx.load(onnx_path), onnx_path, save_as_external_data=False)
+    if os.path.exists(onnx_path + ".data"):
+        os.remove(onnx_path + ".data")
     with open(os.path.join(OUT_DIR, "labels_color.txt"), "w") as f:
         f.write(";".join(classes) + "\n")   # classifier labels: one line, ';' separated
 
