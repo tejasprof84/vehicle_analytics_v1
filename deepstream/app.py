@@ -102,6 +102,26 @@ mode=balanced
 # ---------------------------------------------------------------------------
 # Counting logic (pad probe)
 # ---------------------------------------------------------------------------
+def meta_type_id(meta_type):
+    """
+    Meta types as plain ints. pyds returns NvDsMetaType enums from some calls and
+    ints from others, and an enum never equals an int, so compare the int values.
+    """
+    return int(meta_type)
+
+
+def user_meta_types(l_user):
+    """List the meta type ids in a user-meta list (for the one-time debug log)."""
+    types = []
+    while l_user is not None:
+        try:
+            types.append(meta_type_id(pyds.NvDsUserMeta.cast(l_user.data).base_meta.meta_type))
+            l_user = l_user.next
+        except StopIteration:
+            break
+    return types
+
+
 class VehicleCounter:
     """Reads DeepStream metadata on every batch and turns line crossings into DB events."""
 
@@ -112,8 +132,10 @@ class VehicleCounter:
         self.totals = {"in": 0, "out": 0}
         self.frames = 0
         self.t0 = time.monotonic()
-        self.analytics_obj_type = pyds.nvds_get_user_meta_type("NVIDIA.DSANALYTICSOBJ.USER_META")
-        self.analytics_frame_type = pyds.nvds_get_user_meta_type("NVIDIA.DSANALYTICSFRAME.USER_META")
+        # nvdsanalytics user-meta type ids, looked up on the first buffer (as NVIDIA's samples do)
+        self.analytics_obj_type = None
+        self.analytics_frame_type = None
+        self.meta_types_logged = False
         # health check for the FPS log: objects carrying nvdsanalytics meta, and
         # nvdsanalytics' own cumulative line-crossing counts
         self.analytics_objs = 0
@@ -159,7 +181,7 @@ class VehicleCounter:
                 user_meta = pyds.NvDsUserMeta.cast(l_user.data)
             except StopIteration:
                 break
-            if user_meta.base_meta.meta_type == self.analytics_obj_type:
+            if meta_type_id(user_meta.base_meta.meta_type) == self.analytics_obj_type:
                 info = pyds.NvDsAnalyticsObjInfo.cast(user_meta.user_meta_data)
                 self.analytics_objs += 1
                 crossed.extend(info.lcStatus)
@@ -177,7 +199,7 @@ class VehicleCounter:
                 user_meta = pyds.NvDsUserMeta.cast(l_user.data)
             except StopIteration:
                 break
-            if user_meta.base_meta.meta_type == self.analytics_frame_type:
+            if meta_type_id(user_meta.base_meta.meta_type) == self.analytics_frame_type:
                 info = pyds.NvDsAnalyticsFrameMeta.cast(user_meta.user_meta_data)
                 self.lc_cum = dict(info.objLCCumCnt)
             try:
@@ -211,6 +233,12 @@ class VehicleCounter:
         return Gst.PadProbeReturn.OK
 
     def _process_batch(self, gst_buffer):
+        if self.analytics_obj_type is None:
+            self.analytics_obj_type = meta_type_id(
+                pyds.nvds_get_user_meta_type("NVIDIA.DSANALYTICSOBJ.USER_META"))
+            self.analytics_frame_type = meta_type_id(
+                pyds.nvds_get_user_meta_type("NVIDIA.DSANALYTICSFRAME.USER_META"))
+
         batch_meta = pyds.gst_buffer_get_nvds_batch_meta(hash(gst_buffer))
         l_frame = batch_meta.frame_meta_list
         while l_frame is not None:
@@ -218,6 +246,14 @@ class VehicleCounter:
                 frame_meta = pyds.NvDsFrameMeta.cast(l_frame.data)
             except StopIteration:
                 break
+
+            if not self.meta_types_logged and frame_meta.obj_meta_list is not None:
+                first_obj = pyds.NvDsObjectMeta.cast(frame_meta.obj_meta_list.data)
+                log.info("Meta types: analytics obj=%d frame=%d | seen on object=%s frame=%s",
+                         self.analytics_obj_type, self.analytics_frame_type,
+                         user_meta_types(first_obj.obj_user_meta_list),
+                         user_meta_types(frame_meta.frame_user_meta_list))
+                self.meta_types_logged = True
 
             l_obj = frame_meta.obj_meta_list
             while l_obj is not None:
