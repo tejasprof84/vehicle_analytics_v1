@@ -113,6 +113,11 @@ class VehicleCounter:
         self.frames = 0
         self.t0 = time.monotonic()
         self.analytics_obj_type = pyds.nvds_get_user_meta_type("NVIDIA.DSANALYTICSOBJ.USER_META")
+        self.analytics_frame_type = pyds.nvds_get_user_meta_type("NVIDIA.DSANALYTICSFRAME.USER_META")
+        # health check for the FPS log: objects carrying nvdsanalytics meta, and
+        # nvdsanalytics' own cumulative line-crossing counts
+        self.analytics_objs = 0
+        self.lc_cum = {}
 
     # -- helpers -------------------------------------------------------------
     def _remember_color(self, obj_meta):
@@ -156,12 +161,29 @@ class VehicleCounter:
                 break
             if user_meta.base_meta.meta_type == self.analytics_obj_type:
                 info = pyds.NvDsAnalyticsObjInfo.cast(user_meta.user_meta_data)
+                self.analytics_objs += 1
                 crossed.extend(info.lcStatus)
             try:
                 l_user = l_user.next
             except StopIteration:
                 break
         return crossed
+
+    def _read_frame_analytics(self, frame_meta):
+        """Remember nvdsanalytics' own cumulative line-crossing counts (for the FPS log)."""
+        l_user = frame_meta.frame_user_meta_list
+        while l_user is not None:
+            try:
+                user_meta = pyds.NvDsUserMeta.cast(l_user.data)
+            except StopIteration:
+                break
+            if user_meta.base_meta.meta_type == self.analytics_frame_type:
+                info = pyds.NvDsAnalyticsFrameMeta.cast(user_meta.user_meta_data)
+                self.lc_cum = dict(info.objLCCumCnt)
+            try:
+                l_user = l_user.next
+            except StopIteration:
+                break
 
     def _draw_counters(self, batch_meta, frame_meta):
         display_meta = pyds.nvds_acquire_display_meta_from_pool(batch_meta)
@@ -239,13 +261,16 @@ class VehicleCounter:
                 except StopIteration:
                     break
 
+            self._read_frame_analytics(frame_meta)
             self._draw_counters(batch_meta, frame_meta)
             self.frames += 1
             if self.frames % 150 == 0:
                 fps = self.frames / (time.monotonic() - self.t0)
-                log.info("FPS %.1f | in=%d out=%d | db inserted=%d queued=%d",
+                log.info("FPS %.1f | in=%d out=%d | db inserted=%d queued=%d | "
+                         "analytics objs=%d lc_cum=%s",
                          fps, self.totals["in"], self.totals["out"],
-                         self.writer.inserted, self.writer.queue.qsize())
+                         self.writer.inserted, self.writer.queue.qsize(),
+                         self.analytics_objs, self.lc_cum)
             if len(self.counted) > 20000:
                 self.counted.clear()
 
