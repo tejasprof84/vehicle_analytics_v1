@@ -42,19 +42,11 @@ Keep this window open. The `-L` options make the remote services appear on your 
 ```bash
 nvidia-smi                                   # GPU visible?
 cd /root
-git clone https://github.com/<your-user>/vehicle-analytics.git
+git clone https://github.com/tejasprof84/vehicle-analytics.git
 cd vehicle-analytics
 cp .env.example .env
 bash scripts/setup.sh                        # ~10 min
-
-# colour model (~10 min) - see color_classifier/README.md
-cd color_classifier && python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-# upload kaggle.json first:  scp -P PORT kaggle.json root@IP:/root/
-mkdir -p ~/.kaggle && mv /root/kaggle.json ~/.kaggle/ && chmod 600 ~/.kaggle/kaggle.json
-kaggle datasets download -d landrykezebou/vcor-vehicle-color-recognition-dataset -p data/vcor --unzip
-python train.py --data-dir data/vcor --epochs 6
-deactivate && cd ..
+# the trained colour model is already in models/color/ (re-training: color_classifier/README.md)
 
 bash scripts/run_all.sh
 tmux attach -t vehicle
@@ -64,7 +56,7 @@ Then open `http://localhost:8000` on your laptop.
 
 ## 4. Save your work before you stop the instance
 
-Copy the trained model and the generated detector config back to your laptop, then commit them to GitHub. Run this in PowerShell, from inside your local repo folder:
+Only needed if you re-trained the colour model on the GPU machine. Copy it back to your laptop, then commit it to GitHub. Run this in PowerShell, from inside your local repo folder:
 
 ```powershell
 scp -P PORT root@IP:/root/vehicle-analytics/models/color/vehicle_color_resnet18.onnx models/color/

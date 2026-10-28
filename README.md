@@ -116,14 +116,15 @@ flowchart LR
 
 ```bash
 # inside the DeepStream 7.1 container (as root)
-git clone https://github.com/<your-user>/vehicle-analytics.git
+git clone https://github.com/tejasprof84/vehicle-analytics.git
 cd vehicle-analytics
 cp .env.example .env            # DB credentials, input video, RTSP URL
 bash scripts/setup.sh           # ~10 min: packages, pyds, MediaMTX, DB, dashboard build
 ```
 
-### Colour classifier (one time)
-DeepStream 7.x does not ship a colour model, so we train one. It takes about 10 minutes on the GPU.
+### Colour classifier
+DeepStream 7.x does not ship a colour model, so we trained one: ResNet18 fine-tuned for 6 epochs on the VCoR dataset (15 colours), **0.875 validation accuracy**.
+The trained model is included in the repo (`models/color/`), so this step is **optional**. To re-train it (about 10 minutes on a GPU; a free Kaggle T4 notebook also works):
 
 ```bash
 cd color_classifier
