@@ -42,7 +42,7 @@ Keep this window open. The `-L` options make the remote services appear on your 
 ```bash
 nvidia-smi                                   # GPU visible?
 cd /root
-git clone https://github.com/tejasprof84/vehicle-analytics.git
+git clone https://github.com/tejasprof84/vehicle_analytics_v1.git vehicle-analytics
 cd vehicle-analytics
 cp .env.example .env
 bash scripts/setup.sh                        # ~10 min

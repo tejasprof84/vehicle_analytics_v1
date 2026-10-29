@@ -111,7 +111,7 @@ DeepStream needs an NVIDIA GPU. Choose one option.
 
 ### Option A — Google Colab, free (tested)
 
-1. Open **[notebooks/colab_demo.ipynb in Colab](https://colab.research.google.com/github/tejasprof84/vehicle-analytics/blob/main/notebooks/colab_demo.ipynb)**.
+1. Open **[notebooks/colab_demo.ipynb in Colab](https://colab.research.google.com/github/tejasprof84/vehicle_analytics_v1/blob/main/notebooks/colab_demo.ipynb)**.
 2. **Runtime → Change runtime type → T4 GPU**.
 3. Run the cells from top to bottom:
 
@@ -134,7 +134,7 @@ Open the **Dashboard** link from cell 5 in a new tab. Colab runtimes are tempora
 Requirements: NVIDIA GPU (Turing or newer) with driver ≥ 560, the container `nvcr.io/nvidia/deepstream:7.1-triton-multiarch`. For a rented GPU, follow [docs/CLOUD_GPU_SETUP.md](docs/CLOUD_GPU_SETUP.md).
 
 ```bash
-git clone https://github.com/tejasprof84/vehicle-analytics.git
+git clone https://github.com/tejasprof84/vehicle_analytics_v1.git vehicle-analytics
 cd vehicle-analytics
 cp .env.example .env            # DB credentials, input video, RTSP URL
 bash scripts/setup.sh           # FFmpeg, PostgreSQL, pyds, MediaMTX, Node.js, DB, dashboard build
